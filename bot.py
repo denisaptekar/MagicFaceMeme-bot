@@ -4,7 +4,6 @@ from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, Boolean, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -17,6 +16,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FAL_KEY = os.getenv("FAL_KEY")
 PROXY_URL = os.getenv("PROXY_URL")
+
+# ====================== ДИСПЕТЧЕР ======================
+dp = Dispatcher()
 
 # ====================== БАЗА ДАННЫХ ======================
 Base = declarative_base()
@@ -88,7 +90,6 @@ async def handle_message(message: types.Message):
 
 # ====================== ЗАПУСК ======================
 async def main():
-    # Создаём прокси ТОЛЬКО здесь, когда event loop уже запущен
     global bot
     if PROXY_URL:
         connector = ProxyConnector.from_url(PROXY_URL)
