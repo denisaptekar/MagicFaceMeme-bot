@@ -1,0 +1,5 @@
+aiogram[fast]
+fal-client
+python-dotenv
+sqlalchemy
+aiohttp_socks
