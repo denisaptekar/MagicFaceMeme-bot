@@ -78,14 +78,17 @@ after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
 ])
 
-# ====================== СТАРТ ======================
+# ====================== СТАРТ С КАРТИНКОЙ ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    await message.answer(
-        "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
-        "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
-        "<b>Бесплатно:</b> 3 трансформации в день\n\n"
-        "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!",
+    await message.answer_photo(
+        photo="ZCd8E",   # ← твоя картинка
+        caption=(
+            "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
+            "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
+            "<b>Бесплатно:</b> 3 трансформации в день\n\n"
+            "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!"
+        ),
         parse_mode="HTML",
         reply_markup=main_keyboard
     )
@@ -98,8 +101,6 @@ async def process_callback(callback: types.CallbackQuery):
 
     session = Session()
     user = session.query(User).filter_by(user_id=user_id).first()
-
-    # Если пользователя нет в базе — создаём
     if not user:
         user = User(user_id=user_id, referral_code=str(uuid.uuid4())[:8])
         session.add(user)
