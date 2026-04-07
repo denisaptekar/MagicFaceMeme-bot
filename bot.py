@@ -17,7 +17,6 @@ FAL_KEY = os.getenv("FAL_KEY")
 PAYMENT_TOKEN = os.getenv("PAYMENT_TOKEN")
 
 dp = Dispatcher()
-
 user_states = {}
 
 # ====================== БАЗА ДАННЫХ ======================
@@ -99,7 +98,6 @@ async def process_callback(callback: types.CallbackQuery):
     data = callback.data
 
     if data.startswith("template_"):
-        # ... (шаблоны без изменений)
         if data == "template_figure":
             user_states[user_id] = "figure"
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть"
@@ -114,7 +112,6 @@ async def process_callback(callback: types.CallbackQuery):
             text = "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\nПришли своё фото — я сделаю из тебя настоящего миллионера"
 
         await callback.message.edit_text(text, reply_markup=back_keyboard)
-        await callback.answer()
 
     elif data == "referral":
         session = Session()
@@ -129,13 +126,19 @@ async def process_callback(callback: types.CallbackQuery):
             f"{ref_link}\n\n"
             "Поделись ей с друзьями — и за каждого, кто начнёт пользоваться, ты получишь +5 дополнительных генераций!",
             parse_mode="HTML",
-            reply_markup=back_keyboard   # ← Кнопка «Назад» добавлена
+            reply_markup=back_keyboard
         )
         session.close()
-        await callback.answer()
 
     elif data == "buy_premium":
-        # ... (оплата остаётся)
+        await callback.message.answer_invoice(
+            title="Премиум-подписка MagicFace",
+            description="Неограниченные генерации на 30 дней",
+            payload="premium_month",
+            provider_token=PAYMENT_TOKEN,
+            currency="RUB",
+            prices=[types.LabeledPrice(label="Премиум 30 дней", amount=59900)]
+        )
 
     elif data in ["new_request", "back_to_menu"]:
         if data == "new_request":
@@ -147,7 +150,8 @@ async def process_callback(callback: types.CallbackQuery):
             )
             if user_id in user_states:
                 del user_states[user_id]
-        await callback.answer()
+
+    await callback.answer()
 
 # ====================== ОБРАБОТКА ФОТО ======================
 @dp.message()
