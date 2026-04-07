@@ -78,11 +78,11 @@ after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
 ])
 
-# ====================== СТАРТ С КАРТИНКОЙ ======================
+# ====================== СТАРТ С ТВОЕЙ КАРТИНКОЙ ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer_photo(
-        photo="ZCd8E",   # ← твоя картинка
+        photo="https://drive.google.com/uc?id=1d4958ksav3Wcy4O5rBFeVJ_FbnmKOAie",
         caption=(
             "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
             "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
