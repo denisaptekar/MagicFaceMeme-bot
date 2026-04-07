@@ -8,16 +8,12 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, Boolean, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 from fal_client import AsyncClient
-from aiohttp_socks import ProxyConnector
-from aiogram.client.session.aiohttp import AiohttpSession
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FAL_KEY = os.getenv("FAL_KEY")
-PROXY_URL = os.getenv("PROXY_URL")
 
-# ====================== ДИСПЕТЧЕР ======================
 dp = Dispatcher()
 
 # ====================== БАЗА ДАННЫХ ======================
@@ -38,7 +34,6 @@ Base.metadata.create_all(engine)
 fal_client = AsyncClient(key=FAL_KEY)
 
 async def transform_face(photo_url: str, prompt: str):
-    # Улучшенный промт — теперь бот намного лучше сохраняет твоё лицо
     enhanced_prompt = (
         f"{prompt}, the exact same person as in the reference photo, "
         "identical face, same eyes, same nose, same hair, same skin tone, same age, "
@@ -94,18 +89,12 @@ async def handle_message(message: types.Message):
         result_url = await transform_face(photo_url, user_text)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
     except Exception as e:
-        await message.answer(f"⚠️ Ошибка генерации: {str(e)[:200]}")
+        await message.answer(f"⚠️ Ошибка: {str(e)[:250]}")
 
 # ====================== ЗАПУСК ======================
 async def main():
     global bot
-    if PROXY_URL:
-        connector = ProxyConnector.from_url(PROXY_URL)
-        session = AiohttpSession(connector=connector)
-    else:
-        session = AiohttpSession()
-
-    bot = Bot(token=BOT_TOKEN, session=session)
+    bot = Bot(token=BOT_TOKEN)   # без прокси
 
     print("✅ MagicFace Bot запущен и готов к работе!")
     await dp.start_polling(bot)
