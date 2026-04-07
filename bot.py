@@ -16,6 +16,9 @@ FAL_KEY = os.getenv("FAL_KEY")
 
 dp = Dispatcher()
 
+# Простое хранилище выбранного шаблона для пользователя
+user_states = {}  # {user_id: "template_name"}
+
 # ====================== БАЗА ДАННЫХ ======================
 Base = declarative_base()
 engine = create_engine("sqlite:///facebot.db", echo=False)
@@ -30,68 +33,120 @@ class User(Base):
 
 Base.metadata.create_all(engine)
 
-# ====================== FAL ======================
+# ====================== FAL (Flux Pro) ======================
 fal_client = AsyncClient(key=FAL_KEY)
 
 async def transform_face(photo_url: str, prompt: str):
-    # Очень сильный промт — теперь бот почти не меняет пол и лицо
     enhanced_prompt = (
-        f"the exact same young man as in the reference photo, "
-        "male gender, keep the same male face, same eyes, same nose, same hair, same skin tone, same age, "
-        "do not change gender to female, only change clothing and style, "
-        f"{prompt}, highly detailed, realistic, sharp focus, best quality"
+        f"the exact same young man from the reference photo, male, "
+        "identical face, same eyes, same nose, same hair, same skin tone, same age, same facial features, "
+        "do not change gender, "
+        f"only change clothing and overall style to: {prompt}, "
+        "highly detailed, realistic, sharp focus, cinematic lighting, best quality"
     )
     
     result = await fal_client.subscribe(
-        "fal-ai/flux/dev",
+        "fal-ai/flux-pro",
         arguments={
             "prompt": enhanced_prompt,
             "image_url": photo_url,
             "image_size": "square",
-            "num_inference_steps": 12,
+            "num_inference_steps": 20,
             "guidance_scale": 3.5,
-            "strength": 0.88   # ещё сильнее держит оригинальное лицо
+            "strength": 0.82
         }
     )
     return result["images"][0]["url"]
 
+# ====================== КЛАВИАТУРА ======================
+main_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+    [types.InlineKeyboardButton(text="🏋️ Изменить фигуру", callback_data="template_figure")],
+    [types.InlineKeyboardButton(text="🎌 Аниме персонаж", callback_data="template_anime")],
+    [types.InlineKeyboardButton(text="👴 Увидеть себя в старости", callback_data="template_old")],
+    [types.InlineKeyboardButton(text="💼 Миллионер", callback_data="template_millionaire")],
+])
+
 # ====================== СТАРТ ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-        [types.InlineKeyboardButton(text="🔥 Накачанный парень", callback_data="muscular")],
-        [types.InlineKeyboardButton(text="🎌 Аниме персонаж", callback_data="anime")],
-        [types.InlineKeyboardButton(text="🤠 Ковбой", callback_data="cowboy")],
-        [types.InlineKeyboardButton(text="💼 Миллионер", callback_data="millionaire")],
-    ])
     await message.answer(
         "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
-        "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
-        "Бесплатно: 3 трансформации в день",
+        "Выбери один из шаблонов ниже или просто пришли своё селфи + описание, что хочешь изменить.",
         parse_mode="HTML",
-        reply_markup=keyboard
+        reply_markup=main_keyboard
     )
 
-# ====================== ОБРАБОТКА ФОТО ======================
+# ====================== ОБРАБОТКА КНОПОК ======================
+@dp.callback_query(lambda c: c.data.startswith("template_"))
+async def process_template(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    template = callback.data
+
+    if template == "template_figure":
+        user_states[user_id] = "figure"
+        await callback.message.edit_text(
+            "🏋️ **Отлично!** Хочешь изменить фигуру?\n\n"
+            "Пришли своё фото и напиши, **какую фигуру** ты хочешь увидеть (например: накачанный, худой, атлетичный и т.д.)"
+        )
+    elif template == "template_anime":
+        user_states[user_id] = "anime"
+        await callback.message.edit_text(
+            "🎌 **Круто!** Хочешь стать аниме-персонажем?\n\n"
+            "Пришли своё фото и напиши, **в какого аниме-персонажа** хочешь превратиться"
+        )
+    elif template == "template_old":
+        user_states[user_id] = "old"
+        await callback.message.edit_text(
+            "👴 **Интересный запрос!** Хочешь увидеть себя в старости?\n\n"
+            "Пришли своё фото и напиши, **в каком возрасте** ты хочешь себя увидеть"
+        )
+    elif template == "template_millionaire":
+        user_states[user_id] = "millionaire"
+        await callback.message.edit_text(
+            "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\n"
+            "Пришли своё фото — я сделаю из тебя настоящего миллионера"
+        )
+
+    await callback.answer()
+
+# ====================== ОБРАБОТКА ФОТО + ТЕКСТА ======================
 @dp.message()
 async def handle_message(message: types.Message):
     if not message.photo:
-        await message.answer("Отправь мне своё фото и текст в одном сообщении")
+        await message.answer("Пожалуйста, пришли своё фото")
         return
 
     photo = message.photo[-1]
     photo_file = await bot.get_file(photo.file_id)
     photo_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{photo_file.file_path}"
 
-    user_text = message.caption or "сделай красивое фото"
+    user_text = message.caption or ""
+    user_id = message.from_user.id
 
-    await message.answer("🔄 Превращаю тебя... (10–25 секунд)")
+    # Берём выбранный шаблон, если он есть
+    template = user_states.get(user_id, "")
+    
+    if template == "figure":
+        full_prompt = f"change body to {user_text}"
+    elif template == "anime":
+        full_prompt = f"anime style character {user_text}"
+    elif template == "old":
+        full_prompt = f"old version at age {user_text}"
+    elif template == "millionaire":
+        full_prompt = f"millionaire, rich, luxurious style {user_text}"
+    else:
+        full_prompt = user_text
+
+    await message.answer("🔄 Превращаю тебя... (15–35 секунд)")
 
     try:
-        result_url = await transform_face(photo_url, user_text)
+        result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
+        # Очищаем состояние после генерации
+        if user_id in user_states:
+            del user_states[user_id]
     except Exception as e:
-        await message.answer(f"⚠️ Ошибка: {str(e)[:250]}")
+        await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
 
 # ====================== ЗАПУСК ======================
 async def main():
