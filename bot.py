@@ -34,10 +34,12 @@ Base.metadata.create_all(engine)
 fal_client = AsyncClient(key=FAL_KEY)
 
 async def transform_face(photo_url: str, prompt: str):
+    # Очень сильный промт — теперь бот почти не меняет пол и лицо
     enhanced_prompt = (
-        f"{prompt}, the exact same person as in the reference photo, "
-        "identical face, same eyes, same nose, same hair, same skin tone, same age, "
-        "only change clothing, style and background, highly detailed, realistic, sharp focus, best quality"
+        f"the exact same young man as in the reference photo, "
+        "male gender, keep the same male face, same eyes, same nose, same hair, same skin tone, same age, "
+        "do not change gender to female, only change clothing and style, "
+        f"{prompt}, highly detailed, realistic, sharp focus, best quality"
     )
     
     result = await fal_client.subscribe(
@@ -48,7 +50,7 @@ async def transform_face(photo_url: str, prompt: str):
             "image_size": "square",
             "num_inference_steps": 12,
             "guidance_scale": 3.5,
-            "strength": 0.85
+            "strength": 0.88   # ещё сильнее держит оригинальное лицо
         }
     )
     return result["images"][0]["url"]
@@ -94,7 +96,7 @@ async def handle_message(message: types.Message):
 # ====================== ЗАПУСК ======================
 async def main():
     global bot
-    bot = Bot(token=BOT_TOKEN)   # без прокси
+    bot = Bot(token=BOT_TOKEN)
 
     print("✅ MagicFace Bot запущен и готов к работе!")
     await dp.start_polling(bot)
