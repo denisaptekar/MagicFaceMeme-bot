@@ -98,6 +98,7 @@ async def process_callback(callback: types.CallbackQuery):
     data = callback.data
 
     if data.startswith("template_"):
+        # шаблоны
         if data == "template_figure":
             user_states[user_id] = "figure"
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть"
@@ -126,7 +127,7 @@ async def process_callback(callback: types.CallbackQuery):
             f"{ref_link}\n\n"
             "Поделись ей с друзьями — и за каждого, кто начнёт пользоваться, ты получишь +5 дополнительных генераций!",
             parse_mode="HTML",
-            reply_markup=back_keyboard
+            reply_markup=back_keyboard   # ← кнопка Назад
         )
         session.close()
 
@@ -138,6 +139,11 @@ async def process_callback(callback: types.CallbackQuery):
             provider_token=PAYMENT_TOKEN,
             currency="RUB",
             prices=[types.LabeledPrice(label="Премиум 30 дней", amount=59900)]
+        )
+        # Добавляем кнопку "Назад" после отправки инвойса
+        await callback.message.answer(
+            "💳 Оплата открыта в отдельном окне.\nЕсли передумал — нажми ниже:",
+            reply_markup=back_keyboard
         )
 
     elif data in ["new_request", "back_to_menu"]:
