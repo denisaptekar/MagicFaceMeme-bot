@@ -79,7 +79,9 @@ after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
 async def start(message: types.Message):
     await message.answer(
         "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
-        "Выбери шаблон ниже или просто пришли своё селфи + описание.",
+        "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
+        "<b>Бесплатно:</b> 3 трансформации в день\n\n"
+        "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!",
         parse_mode="HTML",
         reply_markup=main_keyboard
     )
@@ -153,10 +155,8 @@ async def handle_message(message: types.Message):
         result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
         
-        # Кнопки после генерации
         await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
         
-        # Очищаем состояние
         if user_id in user_states:
             del user_states[user_id]
 
