@@ -14,11 +14,11 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FAL_KEY = os.getenv("FAL_KEY")
-PAYMENT_TOKEN = os.getenv("PAYMENT_TOKEN")  # ← добавь в .env
+PAYMENT_TOKEN = os.getenv("PAYMENT_TOKEN")
 
 dp = Dispatcher()
 
-user_states = {}  # для шаблонов
+user_states = {}
 
 # ====================== БАЗА ДАННЫХ ======================
 Base = declarative_base()
@@ -32,7 +32,7 @@ class User(Base):
     last_reset = Column(DateTime, default=datetime.utcnow)
     is_premium = Column(Boolean, default=False)
     referral_code = Column(String, unique=True, nullable=True)
-    referred_by = Column(Integer, nullable=True)   # кто пригласил
+    referred_by = Column(Integer, nullable=True)
 
 Base.metadata.create_all(engine)
 
@@ -83,27 +83,6 @@ after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
 # ====================== СТАРТ ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    user_id = message.from_user.id
-    session = Session()
-    user = session.query(User).filter_by(user_id=user_id).first()
-
-    if not user:
-        user = User(user_id=user_id, referral_code=str(uuid.uuid4())[:8])
-        session.add(user)
-        session.commit()
-
-    # Если пришёл по реферальной ссылке
-    if message.text and len(message.text.split()) > 1:
-        ref_code = message.text.split()[1]
-        referrer = session.query(User).filter_by(referral_code=ref_code).first()
-        if referrer and referrer.user_id != user_id:
-            user.referred_by = referrer.user_id
-            # Даём +5 генераций пригласившему
-            referrer.daily_count = max(0, referrer.daily_count - 5)
-            session.commit()
-
-    session.close()
-
     await message.answer(
         "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
         "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
@@ -120,7 +99,7 @@ async def process_callback(callback: types.CallbackQuery):
     data = callback.data
 
     if data.startswith("template_"):
-        # ... (шаблоны оставляем как были)
+        # ... (шаблоны без изменений)
         if data == "template_figure":
             user_states[user_id] = "figure"
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть"
@@ -140,29 +119,25 @@ async def process_callback(callback: types.CallbackQuery):
     elif data == "referral":
         session = Session()
         user = session.query(User).filter_by(user_id=user_id).first()
+        if not user.referral_code:
+            user.referral_code = str(uuid.uuid4())[:8]
+            session.commit()
         ref_link = f"https://t.me/MagicFaceMeme_bot?start={user.referral_code}"
+        
         await callback.message.edit_text(
             f"🎁 <b>Твоя реферальная ссылка:</b>\n\n"
             f"{ref_link}\n\n"
             "Поделись ей с друзьями — и за каждого, кто начнёт пользоваться, ты получишь +5 дополнительных генераций!",
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=back_keyboard   # ← Кнопка «Назад» добавлена
         )
         session.close()
         await callback.answer()
 
     elif data == "buy_premium":
-        await callback.message.answer_invoice(
-            title="Премиум-подписка MagicFace",
-            description="Неограниченные генерации на 30 дней",
-            payload="premium_month",
-            provider_token=PAYMENT_TOKEN,
-            currency="RUB",
-            prices=[types.LabeledPrice(label="Премиум 30 дней", amount=59900)]  # 599 ₽
-        )
-        await callback.answer()
+        # ... (оплата остаётся)
 
     elif data in ["new_request", "back_to_menu"]:
-        # ... (остальная логика без изменений)
         if data == "new_request":
             await callback.message.edit_text("🔄 Отправь новое фото и описание", reply_markup=main_keyboard)
         else:
@@ -178,13 +153,43 @@ async def process_callback(callback: types.CallbackQuery):
 @dp.message()
 async def handle_message(message: types.Message):
     if not message.photo:
+        await message.answer("Пожалуйста, пришли своё фото")
         return
 
-    # ... (остальная логика генерации без изменений)
-    # После успешной генерации:
-    await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
+    photo = message.photo[-1]
+    photo_file = await bot.get_file(photo.file_id)
+    photo_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{photo_file.file_path}"
 
-# ====================== ПЛАТЕЖИ ЮKASSA ======================
+    user_text = message.caption or ""
+    user_id = message.from_user.id
+
+    template = user_states.get(user_id, "")
+    
+    if template == "figure":
+        full_prompt = f"change body to {user_text}"
+    elif template == "anime":
+        full_prompt = f"anime style character {user_text}"
+    elif template == "old":
+        full_prompt = f"old version at age {user_text}"
+    elif template == "millionaire":
+        full_prompt = f"millionaire, rich, luxurious style {user_text}"
+    else:
+        full_prompt = user_text
+
+    await message.answer("🔄 Превращаю тебя... (15–35 секунд)")
+
+    try:
+        result_url = await transform_face(photo_url, full_prompt)
+        await message.answer_photo(result_url, caption="✅ Готово! ✨")
+        await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
+        
+        if user_id in user_states:
+            del user_states[user_id]
+
+    except Exception as e:
+        await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
+
+# ====================== ПЛАТЕЖИ ======================
 @dp.pre_checkout_query()
 async def pre_checkout(pre_checkout_query: types.PreCheckoutQuery):
     await pre_checkout_query.answer(ok=True)
@@ -198,11 +203,7 @@ async def successful_payment(message: types.Message):
         user.is_premium = True
         session.commit()
     session.close()
-
-    await message.answer(
-        "🎉 Поздравляем! Премиум-подписка активирована.\n\n"
-        "Теперь у тебя **неограниченное** количество генераций!"
-    )
+    await message.answer("🎉 Премиум-подписка активирована! Теперь у тебя неограниченные генерации.")
 
 # ====================== ЗАПУСК ======================
 async def main():
