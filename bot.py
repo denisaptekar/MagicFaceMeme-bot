@@ -31,11 +31,10 @@ class User(Base):
     last_reset = Column(DateTime, default=datetime.utcnow)
     is_premium = Column(Boolean, default=False)
     referral_code = Column(String, unique=True, nullable=True)
-    referred_by = Column(Integer, nullable=True)
 
 Base.metadata.create_all(engine)
 
-# ====================== FAL (Flux Pro) ======================
+# ====================== FAL ======================
 fal_client = AsyncClient(key=FAL_KEY)
 
 async def transform_face(photo_url: str, prompt: str):
@@ -91,14 +90,14 @@ async def start(message: types.Message):
         reply_markup=main_keyboard
     )
 
-# ====================== ОБРАБОТКА КНОПОК ======================
+# ====================== КНОПКИ ======================
 @dp.callback_query()
 async def process_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
 
+    # Шаблоны
     if data.startswith("template_"):
-        # шаблоны
         if data == "template_figure":
             user_states[user_id] = "figure"
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть"
@@ -111,9 +110,9 @@ async def process_callback(callback: types.CallbackQuery):
         elif data == "template_millionaire":
             user_states[user_id] = "millionaire"
             text = "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\nПришли своё фото — я сделаю из тебя настоящего миллионера"
-
         await callback.message.edit_text(text, reply_markup=back_keyboard)
 
+    # Рефералка
     elif data == "referral":
         session = Session()
         user = session.query(User).filter_by(user_id=user_id).first()
@@ -127,10 +126,11 @@ async def process_callback(callback: types.CallbackQuery):
             f"{ref_link}\n\n"
             "Поделись ей с друзьями — и за каждого, кто начнёт пользоваться, ты получишь +5 дополнительных генераций!",
             parse_mode="HTML",
-            reply_markup=back_keyboard   # ← кнопка Назад
+            reply_markup=back_keyboard
         )
         session.close()
 
+    # Оплата
     elif data == "buy_premium":
         await callback.message.answer_invoice(
             title="Премиум-подписка MagicFace",
@@ -140,22 +140,19 @@ async def process_callback(callback: types.CallbackQuery):
             currency="RUB",
             prices=[types.LabeledPrice(label="Премиум 30 дней", amount=59900)]
         )
-        # Добавляем кнопку "Назад" после отправки инвойса
-        await callback.message.answer(
-            "💳 Оплата открыта в отдельном окне.\nЕсли передумал — нажми ниже:",
-            reply_markup=back_keyboard
-        )
+        await callback.message.answer("💳 Оплата открыта.\nЕсли передумал — нажми ниже:", reply_markup=back_keyboard)
 
-    elif data in ["new_request", "back_to_menu"]:
-        if data == "new_request":
-            await callback.message.edit_text("🔄 Отправь новое фото и описание", reply_markup=main_keyboard)
-        else:
-            await callback.message.edit_text(
-                "👋 Главное меню\n\nВыбери шаблон или пришли своё селфи + описание",
-                reply_markup=main_keyboard
-            )
-            if user_id in user_states:
-                del user_states[user_id]
+    # Назад / Ещё одна
+    elif data == "back_to_menu":
+        await callback.message.edit_text(
+            "👋 Главное меню\n\nВыбери шаблон или пришли своё селфи + описание",
+            reply_markup=main_keyboard
+        )
+        if user_id in user_states:
+            del user_states[user_id]
+
+    elif data == "new_request":
+        await callback.message.edit_text("🔄 Отправь новое фото и описание", reply_markup=main_keyboard)
 
     await callback.answer()
 
@@ -192,10 +189,8 @@ async def handle_message(message: types.Message):
         result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
         await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
-        
         if user_id in user_states:
             del user_states[user_id]
-
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
 
@@ -206,20 +201,12 @@ async def pre_checkout(pre_checkout_query: types.PreCheckoutQuery):
 
 @dp.message(lambda message: message.successful_payment)
 async def successful_payment(message: types.Message):
-    user_id = message.from_user.id
-    session = Session()
-    user = session.query(User).filter_by(user_id=user_id).first()
-    if user:
-        user.is_premium = True
-        session.commit()
-    session.close()
-    await message.answer("🎉 Премиум-подписка активирована! Теперь у тебя неограниченные генерации.")
+    await message.answer("🎉 Премиум-подписка активирована!")
 
 # ====================== ЗАПУСК ======================
 async def main():
     global bot
     bot = Bot(token=BOT_TOKEN)
-
     print("✅ MagicFace Bot запущен и готов к работе!")
     await dp.start_polling(bot)
 
