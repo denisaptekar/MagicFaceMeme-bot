@@ -90,14 +90,22 @@ async def start(message: types.Message):
         reply_markup=main_keyboard
     )
 
-# ====================== КНОПКИ ======================
+# ====================== ОБРАБОТКА КНОПОК ======================
 @dp.callback_query()
 async def process_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
 
+    session = Session()
+    user = session.query(User).filter_by(user_id=user_id).first()
+
+    # Если пользователя нет в базе — создаём
+    if not user:
+        user = User(user_id=user_id, referral_code=str(uuid.uuid4())[:8])
+        session.add(user)
+        session.commit()
+
     if data.startswith("template_"):
-        # шаблоны
         if data == "template_figure":
             user_states[user_id] = "figure"
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть"
@@ -114,13 +122,7 @@ async def process_callback(callback: types.CallbackQuery):
         await callback.message.edit_text(text, reply_markup=back_keyboard)
 
     elif data == "referral":
-        session = Session()
-        user = session.query(User).filter_by(user_id=user_id).first()
-        if not user.referral_code:
-            user.referral_code = str(uuid.uuid4())[:8]
-            session.commit()
         ref_link = f"https://t.me/MagicFaceMeme_bot?start={user.referral_code}"
-        
         await callback.message.edit_text(
             f"🎁 <b>Твоя реферальная ссылка:</b>\n\n"
             f"{ref_link}\n\n"
@@ -128,7 +130,6 @@ async def process_callback(callback: types.CallbackQuery):
             parse_mode="HTML",
             reply_markup=back_keyboard
         )
-        session.close()
 
     elif data == "buy_premium":
         await callback.message.answer_invoice(
@@ -152,6 +153,7 @@ async def process_callback(callback: types.CallbackQuery):
     elif data == "new_request":
         await callback.message.edit_text("🔄 Отправь новое фото и описание", reply_markup=main_keyboard)
 
+    session.close()
     await callback.answer()
 
 # ====================== ОБРАБОТКА ФОТО ======================
@@ -187,8 +189,10 @@ async def handle_message(message: types.Message):
         result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
         await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
+        
         if user_id in user_states:
             del user_states[user_id]
+
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
 
