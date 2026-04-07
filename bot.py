@@ -16,7 +16,6 @@ FAL_KEY = os.getenv("FAL_KEY")
 
 dp = Dispatcher()
 
-# Простое хранилище выбранного шаблона для пользователя
 user_states = {}  # {user_id: "template_name"}
 
 # ====================== БАЗА ДАННЫХ ======================
@@ -58,7 +57,7 @@ async def transform_face(photo_url: str, prompt: str):
     )
     return result["images"][0]["url"]
 
-# ====================== КЛАВИАТУРА ======================
+# ====================== ГЛАВНОЕ МЕНЮ ======================
 main_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="🏋️ Изменить фигуру", callback_data="template_figure")],
     [types.InlineKeyboardButton(text="🎌 Аниме персонаж", callback_data="template_anime")],
@@ -66,50 +65,59 @@ main_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="💼 Миллионер", callback_data="template_millionaire")],
 ])
 
+# ====================== КЛАВИАТУРА ПОСЛЕ ГЕНЕРАЦИИ ======================
+after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+    [types.InlineKeyboardButton(text="🔄 Сделать ещё одну трансформацию", callback_data="new_request")],
+    [types.InlineKeyboardButton(text="🏠 Вернуться в главное меню", callback_data="back_to_menu")],
+])
+
 # ====================== СТАРТ ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
         "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
-        "Выбери один из шаблонов ниже или просто пришли своё селфи + описание, что хочешь изменить.",
+        "Выбери шаблон ниже или просто пришли своё селфи + описание.",
         parse_mode="HTML",
         reply_markup=main_keyboard
     )
 
 # ====================== ОБРАБОТКА КНОПОК ======================
-@dp.callback_query(lambda c: c.data.startswith("template_"))
-async def process_template(callback: types.CallbackQuery):
+@dp.callback_query()
+async def process_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    template = callback.data
+    data = callback.data
 
-    if template == "template_figure":
-        user_states[user_id] = "figure"
-        await callback.message.edit_text(
-            "🏋️ **Отлично!** Хочешь изменить фигуру?\n\n"
-            "Пришли своё фото и напиши, **какую фигуру** ты хочешь увидеть (например: накачанный, худой, атлетичный и т.д.)"
-        )
-    elif template == "template_anime":
-        user_states[user_id] = "anime"
-        await callback.message.edit_text(
-            "🎌 **Круто!** Хочешь стать аниме-персонажем?\n\n"
-            "Пришли своё фото и напиши, **в какого аниме-персонажа** хочешь превратиться"
-        )
-    elif template == "template_old":
-        user_states[user_id] = "old"
-        await callback.message.edit_text(
-            "👴 **Интересный запрос!** Хочешь увидеть себя в старости?\n\n"
-            "Пришли своё фото и напиши, **в каком возрасте** ты хочешь себя увидеть"
-        )
-    elif template == "template_millionaire":
-        user_states[user_id] = "millionaire"
-        await callback.message.edit_text(
-            "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\n"
-            "Пришли своё фото — я сделаю из тебя настоящего миллионера"
-        )
+    if data.startswith("template_"):
+        if data == "template_figure":
+            user_states[user_id] = "figure"
+            text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть (накачанный, атлетичный, худой и т.д.)"
+        elif data == "template_anime":
+            user_states[user_id] = "anime"
+            text = "🎌 **Круто!** Хочешь стать аниме-персонажем?\n\nПришли своё фото и напиши, в какого аниме-персонажа хочешь превратиться"
+        elif data == "template_old":
+            user_states[user_id] = "old"
+            text = "👴 **Интересно!** Хочешь увидеть себя в старости?\n\nПришли своё фото и напиши, в каком возрасте хочешь себя увидеть"
+        elif data == "template_millionaire":
+            user_states[user_id] = "millionaire"
+            text = "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\nПришли своё фото — я сделаю из тебя настоящего миллионера"
 
-    await callback.answer()
+        await callback.message.edit_text(text)
+        await callback.answer()
 
-# ====================== ОБРАБОТКА ФОТО + ТЕКСТА ======================
+    elif data == "new_request":
+        await callback.message.edit_text("🔄 Отправь новое фото и описание (или выбери шаблон ниже)", reply_markup=main_keyboard)
+        await callback.answer()
+
+    elif data == "back_to_menu":
+        await callback.message.edit_text(
+            "👋 Главное меню\n\nВыбери шаблон или пришли своё селфи + описание",
+            reply_markup=main_keyboard
+        )
+        if user_id in user_states:
+            del user_states[user_id]
+        await callback.answer()
+
+# ====================== ОБРАБОТКА ФОТО ======================
 @dp.message()
 async def handle_message(message: types.Message):
     if not message.photo:
@@ -123,7 +131,6 @@ async def handle_message(message: types.Message):
     user_text = message.caption or ""
     user_id = message.from_user.id
 
-    # Берём выбранный шаблон, если он есть
     template = user_states.get(user_id, "")
     
     if template == "figure":
@@ -142,9 +149,17 @@ async def handle_message(message: types.Message):
     try:
         result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
-        # Очищаем состояние после генерации
+        
+        # После генерации показываем удобные кнопки
+        await message.answer(
+            "Что делаем дальше?",
+            reply_markup=after_gen_keyboard
+        )
+        
+        # Очищаем состояние
         if user_id in user_states:
             del user_states[user_id]
+
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
 
