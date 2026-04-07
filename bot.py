@@ -8,16 +8,12 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, Boolean, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
 from fal_client import AsyncClient
-from aiohttp_socks import ProxyConnector
-from aiogram.client.session.aiohttp import AiohttpSession
 
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 FAL_KEY = os.getenv("FAL_KEY")
-PROXY_URL = os.getenv("PROXY_URL")
 
-# ====================== ДИСПЕТЧЕР (ОБЯЗАТЕЛЬНО ЗДЕСЬ) ======================
 dp = Dispatcher()
 
 # ====================== БАЗА ДАННЫХ ======================
@@ -91,13 +87,7 @@ async def handle_message(message: types.Message):
 # ====================== ЗАПУСК ======================
 async def main():
     global bot
-    if PROXY_URL:
-        connector = ProxyConnector.from_url(PROXY_URL)
-        session = AiohttpSession(connector=connector)
-    else:
-        session = AiohttpSession()
-
-    bot = Bot(token=BOT_TOKEN, session=session)
+    bot = Bot(token=BOT_TOKEN)   # без прокси
 
     print("✅ MagicFace Bot запущен и готов к работе!")
     await dp.start_polling(bot)
