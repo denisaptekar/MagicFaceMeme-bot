@@ -57,7 +57,7 @@ async def transform_face(photo_url: str, prompt: str):
     )
     return result["images"][0]["url"]
 
-# ====================== ГЛАВНОЕ МЕНЮ ======================
+# ====================== КЛАВИАТУРЫ ======================
 main_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="🏋️ Изменить фигуру", callback_data="template_figure")],
     [types.InlineKeyboardButton(text="🎌 Аниме персонаж", callback_data="template_anime")],
@@ -65,7 +65,10 @@ main_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="💼 Миллионер", callback_data="template_millionaire")],
 ])
 
-# ====================== КЛАВИАТУРА ПОСЛЕ ГЕНЕРАЦИИ ======================
+back_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+    [types.InlineKeyboardButton(text="⬅️ Назад в меню", callback_data="back_to_menu")]
+])
+
 after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="🔄 Сделать ещё одну трансформацию", callback_data="new_request")],
     [types.InlineKeyboardButton(text="🏠 Вернуться в главное меню", callback_data="back_to_menu")],
@@ -93,7 +96,7 @@ async def process_callback(callback: types.CallbackQuery):
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть (накачанный, атлетичный, худой и т.д.)"
         elif data == "template_anime":
             user_states[user_id] = "anime"
-            text = "🎌 **Круто!** Хочешь стать аниме-персонажем?\n\nПришли своё фото и напиши, в какого аниме-персонажа хочешь превратиться"
+            text = "🎌 **Круто!** Хочешь стать аниме-персонажем?\n\nПришли своё фото и я сделаю из тебя аниме-персонажа"
         elif data == "template_old":
             user_states[user_id] = "old"
             text = "👴 **Интересно!** Хочешь увидеть себя в старости?\n\nПришли своё фото и напиши, в каком возрасте хочешь себя увидеть"
@@ -101,7 +104,7 @@ async def process_callback(callback: types.CallbackQuery):
             user_states[user_id] = "millionaire"
             text = "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\nПришли своё фото — я сделаю из тебя настоящего миллионера"
 
-        await callback.message.edit_text(text)
+        await callback.message.edit_text(text, reply_markup=back_keyboard)
         await callback.answer()
 
     elif data == "new_request":
@@ -150,11 +153,8 @@ async def handle_message(message: types.Message):
         result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
         
-        # После генерации показываем удобные кнопки
-        await message.answer(
-            "Что делаем дальше?",
-            reply_markup=after_gen_keyboard
-        )
+        # Кнопки после генерации
+        await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
         
         # Очищаем состояние
         if user_id in user_states:
