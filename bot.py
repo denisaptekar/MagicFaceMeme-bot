@@ -34,7 +34,7 @@ class User(Base):
 
 Base.metadata.create_all(engine)
 
-# ====================== FAL (Flux Pro) ======================
+# ====================== FAL ======================
 fal_client = AsyncClient(key=FAL_KEY)
 
 async def transform_face(photo_url: str, prompt: str):
@@ -78,31 +78,26 @@ after_gen_keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
     [types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
 ])
 
-# ====================== СТАРТ (с твоей картинкой) ======================
+# ====================== СТАРТ ======================
 @dp.message(Command("start"))
 async def start(message: types.Message):
-    # Твоя приветственная картинка
-    welcome_photo = "ZCd8E"   # ← ID твоей картинки
-
-    await message.answer_photo(
-        welcome_photo,
-        caption=(
-            "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
-            "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
-            "<b>Бесплатно:</b> 3 трансформации в день\n\n"
-            "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!"
-        ),
+    await message.answer(
+        "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
+        "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
+        "<b>Бесплатно:</b> 3 трансформации в день\n\n"
+        "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!",
         parse_mode="HTML",
         reply_markup=main_keyboard
     )
 
-# ====================== ОБРАБОТКА КНОПОК ======================
+# ====================== КНОПКИ ======================
 @dp.callback_query()
 async def process_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
 
     if data.startswith("template_"):
+        # шаблоны
         if data == "template_figure":
             user_states[user_id] = "figure"
             text = "🏋️ **Отлично!** Хочешь изменить фигуру?\n\nПришли своё фото и напиши, какую фигуру ты хочешь увидеть"
@@ -192,10 +187,8 @@ async def handle_message(message: types.Message):
         result_url = await transform_face(photo_url, full_prompt)
         await message.answer_photo(result_url, caption="✅ Готово! ✨")
         await message.answer("Что делаем дальше?", reply_markup=after_gen_keyboard)
-        
         if user_id in user_states:
             del user_states[user_id]
-
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
 
