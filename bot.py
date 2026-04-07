@@ -96,6 +96,12 @@ async def process_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
 
+    # Удаляем предыдущее сообщение бота (чтобы чат не засорялся)
+    try:
+        await callback.message.delete()
+    except:
+        pass  # если сообщение уже удалено — не падаем
+
     session = Session()
     user = session.query(User).filter_by(user_id=user_id).first()
     if not user:
@@ -117,11 +123,11 @@ async def process_callback(callback: types.CallbackQuery):
             user_states[user_id] = "millionaire"
             text = "💼 **Супер!** Хочешь почувствовать себя миллионером?\n\nПришли своё фото — я сделаю из тебя настоящего миллионера"
 
-        await callback.message.edit_text(text, reply_markup=back_keyboard)
+        await callback.message.answer(text, reply_markup=back_keyboard)
 
     elif data == "referral":
         ref_link = f"https://t.me/MagicFaceMeme_bot?start={user.referral_code}"
-        await callback.message.edit_text(
+        await callback.message.answer(
             f"🎁 <b>Твоя реферальная ссылка:</b>\n\n"
             f"{ref_link}\n\n"
             "Поделись ей с друзьями — и за каждого, кто начнёт пользоваться, ты получишь +5 дополнительных генераций!",
@@ -138,10 +144,13 @@ async def process_callback(callback: types.CallbackQuery):
             currency="RUB",
             prices=[types.LabeledPrice(label="Премиум 30 дней", amount=59900)]
         )
-        await callback.message.answer("💳 Оплата открыта.\nЕсли передумал — нажми ниже:", reply_markup=back_keyboard)
+        await callback.message.answer(
+            "💳 Оплата открыта в отдельном окне.\nЕсли передумал — нажми ниже:",
+            reply_markup=back_keyboard
+        )
 
     elif data == "back_to_menu":
-        await callback.message.edit_text(
+        await callback.message.answer(
             "👋 Главное меню\n\nВыбери шаблон или пришли своё селфи + описание",
             reply_markup=main_keyboard
         )
@@ -149,7 +158,7 @@ async def process_callback(callback: types.CallbackQuery):
             del user_states[user_id]
 
     elif data == "new_request":
-        await callback.message.edit_text("🔄 Отправь новое фото и описание", reply_markup=main_keyboard)
+        await callback.message.answer("🔄 Отправь новое фото и описание", reply_markup=main_keyboard)
 
     session.close()
     await callback.answer()
