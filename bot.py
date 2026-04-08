@@ -1,7 +1,7 @@
 import asyncio
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
@@ -31,6 +31,7 @@ class User(Base):
     last_reset = Column(DateTime, default=datetime.utcnow)
     is_premium = Column(Boolean, default=False)
     referral_code = Column(String, unique=True, nullable=True)
+    extra_generations = Column(Integer, default=0)   # бонусные генерации
 
 Base.metadata.create_all(engine)
 
@@ -84,7 +85,7 @@ async def start(message: types.Message):
     await message.answer(
         "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
         "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
-        "<b>Бесплатно:</b> 3 трансформации в день\n\n"
+        "<b>Бесплатно:</b> 3 генерации в день\n\n"
         "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!",
         parse_mode="HTML",
         reply_markup=main_keyboard
@@ -96,11 +97,11 @@ async def process_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     data = callback.data
 
-    # Удаляем предыдущее сообщение бота (чтобы чат не засорялся)
+    # Удаляем предыдущее сообщение
     try:
         await callback.message.delete()
     except:
-        pass  # если сообщение уже удалено — не падаем
+        pass
 
     session = Session()
     user = session.query(User).filter_by(user_id=user_id).first()
@@ -144,10 +145,7 @@ async def process_callback(callback: types.CallbackQuery):
             currency="RUB",
             prices=[types.LabeledPrice(label="Премиум 30 дней", amount=59900)]
         )
-        await callback.message.answer(
-            "💳 Оплата открыта в отдельном окне.\nЕсли передумал — нажми ниже:",
-            reply_markup=back_keyboard
-        )
+        await callback.message.answer("💳 Оплата открыта.\nЕсли передумал — нажми ниже:", reply_markup=back_keyboard)
 
     elif data == "back_to_menu":
         await callback.message.answer(
@@ -170,15 +168,35 @@ async def handle_message(message: types.Message):
         await message.answer("Пожалуйста, пришли своё фото")
         return
 
+    user_id = message.from_user.id
+    session = Session()
+    user = session.query(User).filter_by(user_id=user_id).first()
+
+    # Проверка лимита
+    if not user.is_premium:
+        if (datetime.utcnow() - user.last_reset) > timedelta(days=1):
+            user.daily_count = 0
+            user.last_reset = datetime.utcnow()
+        if user.daily_count >= 3 and user.extra_generations <= 0:
+            await message.answer("❌ У тебя закончились бесплатные генерации на сегодня.\n\nКупи премиум или дождись завтра!")
+            session.close()
+            return
+        elif user.extra_generations > 0:
+            user.extra_generations -= 1
+        else:
+            user.daily_count += 1
+
+    session.commit()
+    session.close()
+
+    # Генерация
     photo = message.photo[-1]
     photo_file = await bot.get_file(photo.file_id)
     photo_url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{photo_file.file_path}"
 
     user_text = message.caption or ""
-    user_id = message.from_user.id
-
     template = user_states.get(user_id, "")
-    
+
     if template == "figure":
         full_prompt = f"change body to {user_text}"
     elif template == "anime":
@@ -202,6 +220,19 @@ async def handle_message(message: types.Message):
 
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {str(e)[:200]}")
+
+# ====================== РЕФЕРАЛЬНАЯ ССЫЛКА ======================
+@dp.message(Command("start"))
+async def start(message: types.Message):
+    # ... (твой текст приветствия)
+    await message.answer(
+        "👋 Привет! Я — <b>MagicFace ✨</b>\n\n"
+        "Отправь мне своё селфи + текст, во что хочешь себя превратить.\n\n"
+        "<b>Бесплатно:</b> 3 генерации в день\n\n"
+        "🎁 <b>Реферальная программа:</b> Приведи друга — и получи +5 дополнительных генераций!",
+        parse_mode="HTML",
+        reply_markup=main_keyboard
+    )
 
 # ====================== ПЛАТЕЖИ ======================
 @dp.pre_checkout_query()
